@@ -37,11 +37,11 @@ __device__ double objective_function (double *solutions) {
 	double value;
 
 	#if FUNCTION == SPHERE
-		value = 0.0;
-		for (int i = 0; i < SOLUTION_SIZE; ++i)
-		{
-			value += ( solution(tid,i) * solution(tid,i) );
-		}
+	value = 0.0;
+	for (int i = 0; i < SOLUTION_SIZE; ++i)
+	{
+		value += ( solution(tid,i) * solution(tid,i) );
+	}
 	#endif
 
 	return value;
@@ -86,7 +86,7 @@ __device__ void create_adaptive_random_neighborhood (curandState_t* states, char
 	// }
 }
 
-__global__ void pso (curandState_t* states, double *solutions, double *objectives, char * neighborhood_adjacency_matrix) {
+__global__ void pso (curandState_t* states, double *solutions, double *objectives, char * neighborhood_adjacency_matrix, double *global_best_objective) {
 
 	double velocity[SOLUTION_SIZE];
 	double local_best[SOLUTION_SIZE]; // personal best
@@ -120,6 +120,9 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	// it = 1 since the initialization also counts
 	for (int it = 1; it < MAX_ITERATIONS; ++it)
 	{
+		// compute velocity
+		
+
 		// @TODO
 	}
 	
@@ -154,11 +157,20 @@ int main(int argc, char const *argv[])
 	double *dev_solutions_objectives;
 	char *dev_neighborhood_adjacency_matrix;
 
+
+	double *host_global_best_objective_initial_value =  (double*) malloc (sizeof(double));
+	*host_global_best_objective_initial_value = CUDA_MAX_DOUBLE;
+	double *dev_global_best_objective;
+
 	HANDLE_ERROR( cudaMalloc((void**) &dev_neighborhood_adjacency_matrix, POP_SIZE * POP_SIZE * sizeof(char) ) );
 	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_matrix, SOLUTION_SIZE * POP_SIZE * sizeof(double) ) );
 	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_objectives, POP_SIZE * sizeof(double) ) );
+	HANDLE_ERROR( cudaMalloc((void**) &dev_global_best_objective, sizeof(double) ) );
 
-	pso<<<POP_SIZE,1>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix);
+	HANDLE_ERROR( cudaMemcpy(dev_global_best_objective, host_global_best_objective_initial_value, sizeof(double), cudaMemcpyHostToDevice));
+
+
+	pso<<<POP_SIZE,1>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective);
 
 	// cudaDeviceSynchronize is used to allow printf inside device functions
 	// http://stackoverflow.com/questions/19193468/why-do-we-need-cudadevicesynchronize-in-kernels-with-device-printf
