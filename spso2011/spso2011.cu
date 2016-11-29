@@ -10,8 +10,12 @@
 #define MAX_ITERATIONS 		10
 #define FUNCTION 			SPHERE
 #define CUDA_MAX_DOUBLE 	8.98847e+307 
+#define MIN_VALUE			-100.0
+#define MAX_VALUE			100.0
+
 #define solution(var)		solutions[(blockIdx.x*SOLUTION_SIZE)+var]
 #define objective			objectives[blockIdx.x]
+#define rand(min,max)		(max-min)*curand_uniform(&states[blockIdx.x])+min
 
 #define LOG_LEVEL			INFO
 
@@ -46,13 +50,19 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	int tid = blockIdx.x;
 
 	double velocity[SOLUTION_SIZE];
-	double local_best[SOLUTION_SIZE];
+	double local_best[SOLUTION_SIZE]; // personal best
 	double local_best_objective;
 
+	// initialization
 	for (int var = 0; var < SOLUTION_SIZE; ++var)
 	{
-		solution(var) = curand_uniform(&states[blockIdx.x]); // rand (0.0 .. 1.0)
-		velocity[var] = curand_uniform(&states[blockIdx.x]); // rand (0.0 .. 1.0)
+		// initialize the swarm
+		// http://cs.umw.edu/~finlayson/class/fall14/cpsc425/notes/23-cuda-random.html
+		// x_i = U (min_d, max_d)
+		solution(var) = rand(MIN_VALUE, MAX_VALUE);
+		// v_i = U (mind - x_{i,d} ,maxd - x_{i,d})
+		velocity[var] = rand(MIN_VALUE - solution(var), MAX_VALUE - solution(var));
+		// p_i = x_i
 		local_best[var] = solution(var); // the local_best is initialized with the solution
 	}
 
@@ -71,7 +81,7 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	}
 	
 	#if LOG_LEVEL == INFO
-		printf("%d: [%lf %lf] = %lf\n", tid, solution(0), solution(1), objective);
+		printf("%d: x = [%lf %lf] v = [%lf %lf] = %lf\n", tid, solution(0), solution(1), velocity[0], velocity[1], objective);
 	#endif
 }
 
