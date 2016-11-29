@@ -5,13 +5,15 @@
 #include <curand.h>
 #include <curand_kernel.h>
 
-#define POP_SIZE 		32 // the suggested value is 40
-#define SOLUTION_SIZE 	2
-#define MAX_ITERATIONS 	10
-#define FUNCTION 		SPHERE
-#define CUDA_MAX_DOUBLE 8.98847e+307 
+#define POP_SIZE 			32 // the suggested value is 40
+#define SOLUTION_SIZE 		2
+#define MAX_ITERATIONS 		10
+#define FUNCTION 			SPHERE
+#define CUDA_MAX_DOUBLE 	8.98847e+307 
+#define solution(var)		solutions[(blockIdx.x*SOLUTION_SIZE)+var]
+#define objective			objectives[blockIdx.x]
 
-#define LOG_LEVEL		INFO
+#define LOG_LEVEL			INFO
 
 static void HandleError( cudaError_t err,
 	const char *file,
@@ -24,7 +26,7 @@ static void HandleError( cudaError_t err,
 }
 #define HANDLE_ERROR( err ) (HandleError( err, __FILE__, __LINE__ ))
 
-__device__ double objective_function (double * solution) {
+__device__ double objective_function (double *solutions) {
 
 	double value;
 
@@ -32,38 +34,30 @@ __device__ double objective_function (double * solution) {
 		value = 0.0;
 		for (int i = 0; i < SOLUTION_SIZE; ++i)
 		{
-			value += ( solution[i] * solution[i] );
+			value += ( solution(i) * solution(i) );
 		}
 	#endif
 
 	return value;
 }
 
-__global__ void pso (curandState_t* states, double global_best [], double *global_best_objective) {
+__global__ void pso (curandState_t* states, double *solutions, double *objectives) {
 
 	int tid = blockIdx.x;
-	
-	double solution[SOLUTION_SIZE]; // particle position
-	double objective;
+
 	double velocity[SOLUTION_SIZE];
 	double local_best[SOLUTION_SIZE];
 	double local_best_objective;
 
-	for (int i = 0; i < SOLUTION_SIZE; ++i)
+	for (int var = 0; var < SOLUTION_SIZE; ++var)
 	{
-		solution[i] = curand_uniform(&states[blockIdx.x]); // rand (0.0 .. 1.0)
-		velocity[i] = curand_uniform(&states[blockIdx.x]); // rand (0.0 .. 1.0)
-		local_best[i] = solution[i]; // the local_best is initialized with the solution
+		solution(var) = curand_uniform(&states[blockIdx.x]); // rand (0.0 .. 1.0)
+		velocity[var] = curand_uniform(&states[blockIdx.x]); // rand (0.0 .. 1.0)
+		local_best[var] = solution(var); // the local_best is initialized with the solution
 	}
 
-	#if LOG_LEVEL == INFO
-		if ( blockIdx.x == 0 ) { 
-			printf("%d: %lf\n", tid, *global_best_objective );
-		}
-	#endif
-
 	// evaluate solution
-	objective = objective_function (solution);
+	objective = objective_function (solutions);
 
 	// __syncthreads();
 	// update global best
@@ -77,7 +71,7 @@ __global__ void pso (curandState_t* states, double global_best [], double *globa
 	}
 	
 	#if LOG_LEVEL == INFO
-		printf("%d: [%lf %lf] = %lf\n", tid, solution[0], solution[1], objective);
+		printf("%d: [%lf %lf] = %lf\n", tid, solution(0), solution(1), objective);
 	#endif
 }
 
@@ -102,18 +96,15 @@ int main(int argc, char const *argv[])
   	/* invoke the GPU to initialize all of the random states */
 	init<<<POP_SIZE, 1>>>(time(0), states);
 
-	double *host_global_best_objective_initial_value =  (double*) malloc (sizeof(double));
-	*host_global_best_objective_initial_value = CUDA_MAX_DOUBLE;
+	// solutions[POPULATION_SIZE][SOLUTION_SIZE]
+	// [p0v0 p0v1 p1v0 p1v1 p2v0 p2v1]
+	double *dev_solutions_matrix; 
+	double *dev_solutions_objectives;
 
-	double *dev_global_best;
-	double *dev_global_best_objective;
+	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_matrix, SOLUTION_SIZE * POP_SIZE * sizeof(double) ) );
+	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_objectives, POP_SIZE * sizeof(double) ) );
 
-	HANDLE_ERROR( cudaMalloc((void**) &dev_global_best, SOLUTION_SIZE * sizeof(double) ) );
-	HANDLE_ERROR( cudaMalloc((void**) &dev_global_best_objective, sizeof(double) ) );
-	HANDLE_ERROR( cudaMemcpy(dev_global_best_objective, host_global_best_objective_initial_value, sizeof(double), cudaMemcpyHostToDevice));
-
-
-	pso<<<POP_SIZE,1>>>(states, dev_global_best, dev_global_best_objective);
+	pso<<<POP_SIZE,1>>>(states, dev_solutions_matrix, dev_solutions_objectives);
 
 	// cudaDeviceSynchronize is used to allow printf inside device functions
 	// http://stackoverflow.com/questions/19193468/why-do-we-need-cudadevicesynchronize-in-kernels-with-device-printf
