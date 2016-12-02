@@ -8,16 +8,16 @@
 #define POP_SIZE 			32 // the suggested value is 40
 #define SOLUTION_SIZE 		2
 #define K 					3
-#define MAX_ITERATIONS 		10
+#define MAX_ITERATIONS 		2 // 100
 #define FUNCTION 			SPHERE
 #define CUDA_MAX_DOUBLE 	8.98847e+307 
 #define MIN_VALUE			-100.0
 #define MAX_VALUE			100.0
 
-#define tid							blockIdx.x
+#define tid							threadIdx.x
 #define solution(row,col)			solutions[(row*SOLUTION_SIZE)+col]
-#define rand(min,max)				(max-min)*curand_uniform(&states[blockIdx.x])+min
-#define int_rand(max)				curand(&states[blockIdx.x])%max;
+#define rand(min,max)				(max-min)*curand_uniform(&states[threadIdx.x])+min
+#define int_rand(max)				curand(&states[threadIdx.x])%max;
 #define adjacency_matrix(row,col)	neighborhood_adjacency_matrix[(row*POP_SIZE)+col]
 
 
@@ -82,7 +82,7 @@ __device__ void create_adaptive_random_neighborhood (curandState_t* states, bool
 
 	// for (int i = 0; i < POP_SIZE; ++i)
 	// {
-	// 	printf("%d %d = %d\n", blockIdx.x, i, neighborhood_adjacency_matrix[(blockIdx.x*POP_SIZE)+i]);
+	// 	printf("%d %d = %d\n", threadIdx.x, i, neighborhood_adjacency_matrix[(threadIdx.x*POP_SIZE)+i]);
 	// }
 }
 
@@ -101,30 +101,28 @@ __device__ bool solutions_are_different (double *solution_a, double *solution_b)
 
 __device__ void rand_sphere (curandState_t* states, double *x, int dimension) {
 	double length = 0;
-    for (int i = 0; i < dimension; i++) {
-      x[i] = 0.0;
-    }
+	for (int i = 0; i < dimension; i++) {
+		x[i] = 0.0;
+	}
 
-    for (int i = 0; i < D; i++) {
-      x[i] = curand_normal (curandState_t *state);
-      length += length + x[i] * x[i];
-    }
+	for (int i = 0; i < dimension; i++) {
+		x[i] = curand_normal (states);
+		length += length + x[i] * x[i];
+	}
 
-    length = Math.sqrt(length);
+	length = sqrt(length);
 
-    // --------- Step 2. Random radius
+	double r = curand_uniform (states);
 
-    double r = PseudoRandom.randDouble(0, 1);
-
-    for (int i = 0; i < D; i++) {
-      x[i] = r * x[i] / length;
-    }
-
-    return x;
+	for (int i = 0; i < dimension; i++) {
+		x[i] = r * x[i] / length;
+	}
 }
 
-__device__ void update_velocity (curandState_t* states, double *solutions, double *local_best, double *neighbor_best) {
+__device__ void update_velocity (curandState_t* states, double *solutions, double *local_best, double *neighbor_best, double *velocity) {
+
 	double gravity_center[SOLUTION_SIZE];
+	double random_solution[SOLUTION_SIZE];
 	double c = 1.1931; // (1.0 / 2.0 + log(2) )
 	double w = 0.72135; // 1.0 / (2.0 * log(2))
 
@@ -142,17 +140,59 @@ __device__ void update_velocity (curandState_t* states, double *solutions, doubl
 
 	// radius equals to distance between gravity center and the solution
 	double distance = 0;
-	for (int i = 0; i < SOLUTION_SIZE; ++i)
+	for (int var = 0; var < SOLUTION_SIZE; ++var)
 	{
-		distance += ( gravity_center[i] - solution(tid,i) ) * ( gravity_center[i] - solution(tid,i) );
+		distance += ( gravity_center[var] - solution(tid,var) ) * ( gravity_center[var] - solution(tid,var) );
 	}
 	double radius = sqrt(distance);
 
 	double random[SOLUTION_SIZE];
 	rand_sphere(states, random, SOLUTION_SIZE);
 
-	// printf("%d: %lf = dist([%lf %lf], [%lf %lf])\n", tid, radius, gravity_center[0], gravity_center[1], solution(tid, 0), solution(tid, 1));
+	for (int var = 0; var < SOLUTION_SIZE; ++var) {
+		random_solution[var] = gravity_center[var] + radius * random[var];
+	}
 
+	for (int var = 0; var < SOLUTION_SIZE; ++var) {
+		velocity[var] = w * velocity[var] + random_solution[var] - solution(tid,var);
+	}
+}
+
+__device__ void update_position (double *solutions, double *velocity) 
+{
+	double change_velocity = -0.5 ;
+	for (int var = 0; var < SOLUTION_SIZE; ++var) 
+	{
+		solution(tid, var) = solution(tid, var) + velocity[var];
+
+		if (solution(tid, var) < MIN_VALUE) 
+		{
+			solution(tid, var) = MIN_VALUE;
+			velocity[var] = change_velocity * velocity[var];
+		}
+		if (solution(tid, var) > MAX_VALUE) 
+		{
+			solution(tid, var) = MAX_VALUE;
+			velocity[var] = change_velocity * velocity[var];
+		}
+	}
+}
+
+__device__ double atomicMin(double* address, double val)
+{
+    unsigned long long int* address_as_ull =
+                              (unsigned long long int*)address;
+    unsigned long long int old = *address_as_ull, assumed;
+
+    do {
+        assumed = old;
+        old = atomicCAS(address_as_ull, assumed, 
+        	(val < __longlong_as_double(assumed)) ? __double_as_longlong(val) : assumed );
+
+    // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
+    } while (assumed != old);
+
+    return __longlong_as_double(old);
 }
 
 __global__ void pso (curandState_t* states, double *solutions, double *objectives, bool * neighborhood_adjacency_matrix, double *global_best_objective) {
@@ -162,6 +202,14 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	double local_best_objective;
 	double neighbor_best[SOLUTION_SIZE]; // personal best
 	double neighbor_best_objective = CUDA_MAX_DOUBLE;
+	__shared__ double best_fitness;
+	__shared__ double previous_best_fitness;
+
+	// the first thread initializes the best known fitness 
+	if (tid == 0)
+	{
+		best_fitness = CUDA_MAX_DOUBLE;
+	}
 
 	// initialization
 	for (int var = 0; var < SOLUTION_SIZE; ++var)
@@ -178,26 +226,69 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 
 	// evaluate solution
 	objectives[tid] = objective_function (solutions);
+	// f(p_i) = f(x_i)
+	local_best_objective = objectives[tid];
 
+	// each thread creates its random neighborhood of size K
 	create_adaptive_random_neighborhood (states, neighborhood_adjacency_matrix);
 
-	// update neighbor best
 	// all particles need the objective value updated 
 	__syncthreads(); 
+	// update neighbor best
 	neighbor_best_objective = update_neighbor_best (neighbor_best_objective, neighborhood_adjacency_matrix, objectives, neighbor_best, solutions);
-	// the particles can't update its position until all particles updates its neighbor best
-	__syncthreads(); 
+	// update best known fitness
+	atomicMin(&best_fitness, objectives[tid]);
+	// wait all particles updates its neighbor best
+	// wait all particles updates the best known fitness
+	__syncthreads();
 
 	// printf("%d %lf\n", tid, neighbor_best_objective);
 
 	// it = 1 since the initialization also counts
 	for (int it = 1; it < MAX_ITERATIONS; ++it)
 	{
-		// update velocity
-		update_velocity (states, solutions, local_best, neighbor_best);
+		update_velocity (states, solutions, local_best, neighbor_best, velocity);
+		update_position (solutions, velocity);
+		// evaluate solution
+		objectives[tid] = objective_function (solutions);
 
-		// @TODO
+		// update local best
+		if (objectives[tid] < local_best_objective)
+		{
+			local_best_objective = objectives[tid];
+			for (int var = 0; var < SOLUTION_SIZE; ++var)
+			{
+				local_best[var] = solution(tid,var);
+			}
+		}
+
+		// keep the previous best fitness for comparison
+		if (tid == 0)
+		{
+			previous_best_fitness = best_fitness;
+		}
+
+		// all particles need the objective value updated 
+		__syncthreads(); 
+		// update neighbor best
+		neighbor_best_objective = update_neighbor_best (neighbor_best_objective, neighborhood_adjacency_matrix, objectives, neighbor_best, solutions);
+		// update best known fitness
+		atomicMin(&best_fitness, objectives[tid]);
+		// wait all particles updates its neighbor best
+		// wait all particles updates the best known fitness
+		__syncthreads();
+
+		// if there is no improvement of the best known fitness
+		if ( ! (best_fitness < previous_best_fitness ) ) 
+		{
+			// each thread creates its random neighborhood of size K
+			create_adaptive_random_neighborhood (states, neighborhood_adjacency_matrix);
+		}
+
 	}
+
+	// @TODO
+	// getTheBestSolution
 	
 	// printf("%d: x = [%lf %lf] v = [%lf %lf] = %lf\n", tid, solution(tid,0), solution(tid,1), velocity[0], velocity[1], objectives[tid]);
 
@@ -208,10 +299,10 @@ __global__ void init(unsigned int seed, curandState_t* states) {
 
   /* we have to initialize the state */
   curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
-              blockIdx.x, /* the sequence number should be different for each core (unless you want all
+              threadIdx.x, /* the sequence number should be different for each core (unless you want all
                              cores to get the same sequence of numbers for some reason - use thread id! */
               0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
-              	&states[blockIdx.x]);
+              	&states[threadIdx.x]);
 }
 
 int main(int argc, char const *argv[])
@@ -222,7 +313,7 @@ int main(int argc, char const *argv[])
   	/* allocate space on the GPU for the random states */
 	HANDLE_ERROR( cudaMalloc((void**) &states, POP_SIZE * sizeof(curandState_t) ) );
   	/* invoke the GPU to initialize all of the random states */
-	init<<<POP_SIZE, 1>>>(time(0), states);
+	init<<<1, POP_SIZE>>>(time(0), states);
 
 	// solutions[POPULATION_SIZE][SOLUTION_SIZE]
 	// [p0v0 p0v1 p1v0 p1v1 p2v0 p2v1]
@@ -243,7 +334,7 @@ int main(int argc, char const *argv[])
 	HANDLE_ERROR( cudaMemcpy(dev_global_best_objective, host_global_best_objective_initial_value, sizeof(double), cudaMemcpyHostToDevice));
 
 
-	pso<<<POP_SIZE,1>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective);
+	pso<<<1, POP_SIZE>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective);
 
 	// cudaDeviceSynchronize is used to allow printf inside device functions
 	// http://stackoverflow.com/questions/19193468/why-do-we-need-cudadevicesynchronize-in-kernels-with-device-printf
