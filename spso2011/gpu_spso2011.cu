@@ -8,7 +8,7 @@
 #define POP_SIZE 			32 // the suggested value is 40
 #define SOLUTION_SIZE 		2
 #define K 					3
-#define MAX_ITERATIONS 		2 // 100
+#define MAX_ITERATIONS 		100
 #define FUNCTION 			SPHERE
 #define CUDA_MAX_DOUBLE 	8.98847e+307 
 #define MIN_VALUE			-100.0
@@ -195,7 +195,7 @@ __device__ double atomicMin(double* address, double val)
     return __longlong_as_double(old);
 }
 
-__global__ void pso (curandState_t* states, double *solutions, double *objectives, bool * neighborhood_adjacency_matrix, double *global_best_objective) {
+__global__ void pso (curandState_t* states, double *solutions, double *objectives, bool * neighborhood_adjacency_matrix, double *global_best_objective, double* best_solution) {
 
 	double velocity[SOLUTION_SIZE];
 	double local_best[SOLUTION_SIZE]; // personal best
@@ -288,9 +288,16 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	}
 
 	// @TODO
-	// getTheBestSolution
-	
-	// printf("%d: x = [%lf %lf] v = [%lf %lf] = %lf\n", tid, solution(tid,0), solution(tid,1), velocity[0], velocity[1], objectives[tid]);
+	// if the particle found the best solution
+	if (best_fitness == local_best_objective)
+	{
+		*global_best_objective = local_best_objective;
+		for (int i = 0; i < SOLUTION_SIZE; ++i)
+		{
+			best_solution[i] = local_best[i];
+		}
+		// printf("%d: [%g %g] = %g\n", tid, local_best[0], local_best[1], local_best_objective);	
+	}
 
 }
 
@@ -321,20 +328,29 @@ int main(int argc, char const *argv[])
 	double *dev_solutions_objectives;
 	bool *dev_neighborhood_adjacency_matrix;
 
-
-	double *host_global_best_objective_initial_value =  (double*) malloc (sizeof(double));
-	*host_global_best_objective_initial_value = CUDA_MAX_DOUBLE;
+	double *dev_best_solution;
 	double *dev_global_best_objective;
+
+	double *host_best_solution = (double*) malloc (sizeof(double) * SOLUTION_SIZE);
+	double *host_global_best_objective = (double*) malloc (sizeof(double));
 
 	HANDLE_ERROR( cudaMalloc((void**) &dev_neighborhood_adjacency_matrix, POP_SIZE * POP_SIZE * sizeof(bool) ) );
 	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_matrix, SOLUTION_SIZE * POP_SIZE * sizeof(double) ) );
 	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_objectives, POP_SIZE * sizeof(double) ) );
 	HANDLE_ERROR( cudaMalloc((void**) &dev_global_best_objective, sizeof(double) ) );
+	HANDLE_ERROR( cudaMalloc((void**) &dev_best_solution, SOLUTION_SIZE * sizeof(double) ) );
 
-	HANDLE_ERROR( cudaMemcpy(dev_global_best_objective, host_global_best_objective_initial_value, sizeof(double), cudaMemcpyHostToDevice));
+	pso<<<1, POP_SIZE>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective, dev_best_solution);
 
+	HANDLE_ERROR( cudaMemcpy(host_global_best_objective, dev_global_best_objective, sizeof(double), cudaMemcpyDeviceToHost));
+	HANDLE_ERROR( cudaMemcpy(host_best_solution, dev_best_solution, sizeof(double) * SOLUTION_SIZE, cudaMemcpyDeviceToHost));
 
-	pso<<<1, POP_SIZE>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective);
+	printf("[ ");
+	for (int i = 0; i < SOLUTION_SIZE; ++i)
+	{
+		printf("%g ", host_best_solution[i]);
+	}
+	printf("] = %g", *host_global_best_objective);
 
 	// cudaDeviceSynchronize is used to allow printf inside device functions
 	// http://stackoverflow.com/questions/19193468/why-do-we-need-cudadevicesynchronize-in-kernels-with-device-printf
