@@ -238,8 +238,6 @@ double pso (double best_solution[SOLUTION_SIZE]) {
 		}
 	}
 
-	printf("%g ", best_fitness);
-
 	// it = 1 because the initialization also counts
 	for (int it = 1; it < MAX_ITERATIONS; ++it)
 	{
@@ -294,7 +292,6 @@ double pso (double best_solution[SOLUTION_SIZE]) {
 			create_adaptive_random_neighborhood (neighborhood_adjacency_matrix);
 		}
 
-		printf("%g ", best_fitness);
 	}
 
 	for (int i = 0; i < POP_SIZE; ++i)
@@ -308,7 +305,6 @@ double pso (double best_solution[SOLUTION_SIZE]) {
 		}
 	}
 
-	printf("\n");
 	return best_fitness;
 
 }
@@ -317,14 +313,14 @@ int main(int argc, char const *argv[])
 {
 	srand( atoi(argv[1]) );
 	double best_solution[SOLUTION_SIZE];
-	// double best_fitness;
-	// best_fitness = pso(best_solution);
-	pso(best_solution);
+	double best_fitness;
 
-	// for (int i = 0; i < SOLUTION_SIZE; ++i)
-	// {
-	// 	printf("%g\t", best_solution[i]);
-	// }
-	// printf("%g\n", best_fitness);
+	best_fitness = pso(best_solution);
+
+	for (int i = 0; i < SOLUTION_SIZE; ++i)
+	{
+		printf("%g\t", best_solution[i]);
+	}
+	printf("%g\n", best_fitness);
 	return 0;
 }
