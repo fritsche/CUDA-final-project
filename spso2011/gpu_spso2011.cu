@@ -9,15 +9,19 @@
 #define SOLUTION_SIZE 		10
 #define K 					3
 #define MAX_ITERATIONS 		3125
+#define INDEPENDENT_RUNS	51
 #define FUNCTION 			SPHERE
 #define CUDA_MAX_DOUBLE 	8.98847e+307 
 #define MIN_VALUE			-100.0
 #define MAX_VALUE			100.0
 
 #define tid							threadIdx.x
+#define bid							blockIdx.x
+#define stateid						threadIdx.x+blockIdx.x*blockDim.x
 #define solution(row,col)			solutions[(row*SOLUTION_SIZE)+col]
-#define rand(min,max)				(max-min)*curand_uniform(&states[threadIdx.x])+min
-#define int_rand(max)				curand(&states[threadIdx.x])%max;
+#define best_solution(row,col)		best_solution[(row*SOLUTION_SIZE)+col]
+#define rand(min,max)				(max-min)*curand_uniform(&states[stateid])+min
+#define int_rand(max)				curand(&states[stateid])%max;
 #define adjacency_matrix(row,col)	neighborhood_adjacency_matrix[(row*POP_SIZE)+col]
 
 
@@ -100,23 +104,23 @@ __device__ void rand_sphere (curandState_t* states, double *x, int dimension) {
 	}
 
 	for (int i = 0; i < dimension; i++) {
-		x[i] = curand_normal (states);
+		x[i] = curand_normal (&states[stateid]);
 		length += length + x[i] * x[i];
 	}
 
 	length = sqrt(length);
 
-	double r = curand_uniform (states);
+	double r = curand_uniform (&states[stateid]);
 
 	for (int i = 0; i < dimension; i++) 
-{		x[i] = r * x[i] / length;
+		{		x[i] = r * x[i] / length;
+		}
 	}
-}
 
-__device__ void update_velocity (curandState_t* states, double *solutions, double *local_best, double *neighbor_best, double *velocity) {
+	__device__ void update_velocity (curandState_t* states, double *solutions, double *local_best, double *neighbor_best, double *velocity) {
 
-	double gravity_center[SOLUTION_SIZE];
-	double random_solution[SOLUTION_SIZE];
+		double gravity_center[SOLUTION_SIZE];
+		double random_solution[SOLUTION_SIZE];
 	double c = 1.1931; // (1.0 / 2.0 + log(2) )
 	double w = 0.72135; // 1.0 / (2.0 * log(2))
 
@@ -174,19 +178,19 @@ __device__ void update_position (double *solutions, double *velocity)
 
 __device__ double atomicMin(double* address, double val)
 {
-    unsigned long long int* address_as_ull =
-                              (unsigned long long int*)address;
-    unsigned long long int old = *address_as_ull, assumed;
+	unsigned long long int* address_as_ull =
+	(unsigned long long int*)address;
+	unsigned long long int old = *address_as_ull, assumed;
 
-    do {
-        assumed = old;
-        old = atomicCAS(address_as_ull, assumed, 
-        	(val < __longlong_as_double(assumed)) ? __double_as_longlong(val) : assumed );
+	do {
+		assumed = old;
+		old = atomicCAS(address_as_ull, assumed, 
+			(val < __longlong_as_double(assumed)) ? __double_as_longlong(val) : assumed );
 
     // Note: uses integer comparison to avoid hang in case of NaN (since NaN != NaN)
-    } while (assumed != old);
+	} while (assumed != old);
 
-    return __longlong_as_double(old);
+	return __longlong_as_double(old);
 }
 
 __global__ void pso (curandState_t* states, double *global_best_objective, double* best_solution) {
@@ -285,10 +289,10 @@ __global__ void pso (curandState_t* states, double *global_best_objective, doubl
 	// if the particle found the best solution
 	if (best_fitness == local_best_objective)
 	{
-		*global_best_objective = local_best_objective;
+		global_best_objective[bid] = local_best_objective;
 		for (int i = 0; i < SOLUTION_SIZE; ++i)
 		{
-			best_solution[i] = local_best[i];
+			best_solution(bid,i) = local_best[i];
 		}
 	}
 
@@ -297,13 +301,12 @@ __global__ void pso (curandState_t* states, double *global_best_objective, doubl
 /* this GPU kernel function is used to initialize the random states */
 __global__ void init(unsigned int seed, curandState_t* states) {
 
-  /* we have to initialize the state */
-  curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
-              threadIdx.x, /* the sequence number should be different for each core (unless you want all
+  	/* we have to initialize the state */
+  	curand_init(seed, /* the seed can be the same for each core, here we pass the time in from the CPU */
+              stateid, /* the sequence number should be different for each core (unless you want all
                              cores to get the same sequence of numbers for some reason - use thread id! */
               0, /* the offset is how much extra we advance in the sequence for each call, can be 0 */
-              	&states[threadIdx.x]);
-}
+              	&states[stateid]);}
 
 int main(int argc, char const *argv[])
 {
@@ -311,9 +314,9 @@ int main(int argc, char const *argv[])
      we will store a random state for every thread  */
 	curandState_t* states;
   	/* allocate space on the GPU for the random states */
-	HANDLE_ERROR( cudaMalloc((void**) &states, POP_SIZE * sizeof(curandState_t) ) );
+	HANDLE_ERROR( cudaMalloc((void**) &states, INDEPENDENT_RUNS * POP_SIZE * sizeof(curandState_t) ) );
   	/* invoke the GPU to initialize all of the random states */
-	init<<<1, POP_SIZE>>>(atoi(argv[1]), states);
+	init<<<INDEPENDENT_RUNS, POP_SIZE>>>(time(0), states);
 
 	// solutions[POPULATION_SIZE][SOLUTION_SIZE]
 	// [p0v0 p0v1 p1v0 p1v1 p2v0 p2v1]
@@ -324,28 +327,32 @@ int main(int argc, char const *argv[])
 	double *dev_best_solution;
 	double *dev_global_best_objective;
 
-	double *host_best_solution = (double*) malloc (sizeof(double) * SOLUTION_SIZE);
-	double *host_global_best_objective = (double*) malloc (sizeof(double));
+	double *host_best_solution = (double*) malloc (sizeof(double) * SOLUTION_SIZE * INDEPENDENT_RUNS);
+	double *host_global_best_objective = (double*) malloc (sizeof(double) * INDEPENDENT_RUNS);
 
 	// HANDLE_ERROR( cudaMalloc((void**) &dev_neighborhood_adjacency_matrix, POP_SIZE * POP_SIZE * sizeof(bool) ) );
 	// HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_matrix, SOLUTION_SIZE * POP_SIZE * sizeof(double) ) );
 	// HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_objectives, POP_SIZE * sizeof(double) ) );
-	HANDLE_ERROR( cudaMalloc((void**) &dev_global_best_objective, sizeof(double) ) );
-	HANDLE_ERROR( cudaMalloc((void**) &dev_best_solution, SOLUTION_SIZE * sizeof(double) ) );
+	HANDLE_ERROR( cudaMalloc((void**) &dev_global_best_objective, sizeof(double) * INDEPENDENT_RUNS ) );
+	HANDLE_ERROR( cudaMalloc((void**) &dev_best_solution, SOLUTION_SIZE * sizeof(double) * INDEPENDENT_RUNS) );
 
 	// pso<<<1, POP_SIZE>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective, dev_best_solution);
 
-	pso<<<1, POP_SIZE>>>(states, dev_global_best_objective, dev_best_solution);
+	pso<<<INDEPENDENT_RUNS, POP_SIZE>>>(states, dev_global_best_objective, dev_best_solution);
 
 
-	HANDLE_ERROR( cudaMemcpy(host_global_best_objective, dev_global_best_objective, sizeof(double), cudaMemcpyDeviceToHost));
-	HANDLE_ERROR( cudaMemcpy(host_best_solution, dev_best_solution, sizeof(double) * SOLUTION_SIZE, cudaMemcpyDeviceToHost));
+	HANDLE_ERROR( cudaMemcpy(host_global_best_objective, dev_global_best_objective, sizeof(double) * INDEPENDENT_RUNS, cudaMemcpyDeviceToHost));
+	HANDLE_ERROR( cudaMemcpy(host_best_solution, dev_best_solution, sizeof(double) * SOLUTION_SIZE * INDEPENDENT_RUNS, cudaMemcpyDeviceToHost));
 
-	for (int i = 0; i < SOLUTION_SIZE; ++i)
-	{
-		printf("%g\t", host_best_solution[i]);
-	}
-	printf("%g\n", *host_global_best_objective);
+	// for (int run = 0; run < INDEPENDENT_RUNS; ++run)
+	// {
+	// 	printf("%d ", run);	
+	// 	for (int i = 0; i < SOLUTION_SIZE; ++i)
+	// 	{
+	// 		printf("%g\t", host_best_solution[i]);
+	// 	}
+	// 	printf("%g\n", *host_global_best_objective);
+	// }
 
 	// cudaDeviceSynchronize is used to allow printf inside device functions
 	// http://stackoverflow.com/questions/19193468/why-do-we-need-cudadevicesynchronize-in-kernels-with-device-printf
