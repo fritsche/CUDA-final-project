@@ -291,6 +291,7 @@ double pso (double best_solution[SOLUTION_SIZE]) {
 		{
 			create_adaptive_random_neighborhood (neighborhood_adjacency_matrix);
 		}
+
 	}
 
 	for (int i = 0; i < POP_SIZE; ++i)
@@ -313,6 +314,7 @@ int main(int argc, char const *argv[])
 	srand( atoi(argv[1]) );
 	double best_solution[SOLUTION_SIZE];
 	double best_fitness;
+
 	best_fitness = pso(best_solution);
 
 	for (int i = 0; i < SOLUTION_SIZE; ++i)
