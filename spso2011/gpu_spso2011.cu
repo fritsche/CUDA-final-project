@@ -55,7 +55,6 @@ __device__ double update_neighbor_best (double neighbor_best_objective, bool * n
 		if ( adjacency_matrix(i, tid) && objectives[i] <= bestValue ) {
 			bestIndex = i;
 			bestValue = objectives[i];
-			// printf("%d %d %lf\n", tid, i, bestValue);
 		}
 	}
 	if (bestIndex != -1) {
@@ -76,14 +75,9 @@ __device__ void create_adaptive_random_neighborhood (curandState_t* states, bool
 	for (int i = 0; i < K; ++i)
 	{
 		int neighbor = int_rand(POP_SIZE);
-		// printf("%d %d\n", tid, neighbor);
 		adjacency_matrix(tid, neighbor) = 1;
 	}
 
-	// for (int i = 0; i < POP_SIZE; ++i)
-	// {
-	// 	printf("%d %d = %d\n", threadIdx.x, i, neighborhood_adjacency_matrix[(threadIdx.x*POP_SIZE)+i]);
-	// }
 }
 
 __device__ bool solutions_are_different (double *solution_a, double *solution_b) {
@@ -195,7 +189,7 @@ __device__ double atomicMin(double* address, double val)
     return __longlong_as_double(old);
 }
 
-__global__ void pso (curandState_t* states, double *solutions, double *objectives, bool * neighborhood_adjacency_matrix, double *global_best_objective, double* best_solution) {
+__global__ void pso (curandState_t* states, double *global_best_objective, double* best_solution) {
 
 	double velocity[SOLUTION_SIZE];
 	double local_best[SOLUTION_SIZE]; // personal best
@@ -204,6 +198,9 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	double neighbor_best_objective = CUDA_MAX_DOUBLE;
 	__shared__ double best_fitness;
 	__shared__ double previous_best_fitness;
+	__shared__ double solutions[POP_SIZE*SOLUTION_SIZE];
+	__shared__ double objectives[POP_SIZE];
+	__shared__ bool neighborhood_adjacency_matrix[POP_SIZE*POP_SIZE];
 
 	// the first thread initializes the best known fitness 
 	if (tid == 0)
@@ -241,8 +238,6 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	// wait all particles updates its neighbor best
 	// wait all particles updates the best known fitness
 	__syncthreads();
-
-	// printf("%d %lf\n", tid, neighbor_best_objective);
 
 	// it = 1 because the initialization also counts
 	for (int it = 1; it < MAX_ITERATIONS; ++it)
@@ -295,7 +290,6 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 		{
 			best_solution[i] = local_best[i];
 		}
-		// printf("%d: [%g %g] = %g\n", tid, local_best[0], local_best[1], local_best_objective);	
 	}
 
 }
@@ -323,9 +317,9 @@ int main(int argc, char const *argv[])
 
 	// solutions[POPULATION_SIZE][SOLUTION_SIZE]
 	// [p0v0 p0v1 p1v0 p1v1 p2v0 p2v1]
-	double *dev_solutions_matrix; 
-	double *dev_solutions_objectives;
-	bool *dev_neighborhood_adjacency_matrix;
+	// double *dev_solutions_matrix; 
+	// double *dev_solutions_objectives;
+	// bool *dev_neighborhood_adjacency_matrix;
 
 	double *dev_best_solution;
 	double *dev_global_best_objective;
@@ -333,13 +327,16 @@ int main(int argc, char const *argv[])
 	double *host_best_solution = (double*) malloc (sizeof(double) * SOLUTION_SIZE);
 	double *host_global_best_objective = (double*) malloc (sizeof(double));
 
-	HANDLE_ERROR( cudaMalloc((void**) &dev_neighborhood_adjacency_matrix, POP_SIZE * POP_SIZE * sizeof(bool) ) );
-	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_matrix, SOLUTION_SIZE * POP_SIZE * sizeof(double) ) );
-	HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_objectives, POP_SIZE * sizeof(double) ) );
+	// HANDLE_ERROR( cudaMalloc((void**) &dev_neighborhood_adjacency_matrix, POP_SIZE * POP_SIZE * sizeof(bool) ) );
+	// HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_matrix, SOLUTION_SIZE * POP_SIZE * sizeof(double) ) );
+	// HANDLE_ERROR( cudaMalloc((void**) &dev_solutions_objectives, POP_SIZE * sizeof(double) ) );
 	HANDLE_ERROR( cudaMalloc((void**) &dev_global_best_objective, sizeof(double) ) );
 	HANDLE_ERROR( cudaMalloc((void**) &dev_best_solution, SOLUTION_SIZE * sizeof(double) ) );
 
-	pso<<<1, POP_SIZE>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective, dev_best_solution);
+	// pso<<<1, POP_SIZE>>>(states, dev_solutions_matrix, dev_solutions_objectives, dev_neighborhood_adjacency_matrix, dev_global_best_objective, dev_best_solution);
+
+	pso<<<1, POP_SIZE>>>(states, dev_global_best_objective, dev_best_solution);
+
 
 	HANDLE_ERROR( cudaMemcpy(host_global_best_objective, dev_global_best_objective, sizeof(double), cudaMemcpyDeviceToHost));
 	HANDLE_ERROR( cudaMemcpy(host_best_solution, dev_best_solution, sizeof(double) * SOLUTION_SIZE, cudaMemcpyDeviceToHost));
