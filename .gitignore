@@ -5,3 +5,6 @@
 *.cubin
 *.fatbin
 *.out
+*_v0.*
+*_v1.*
+.Rhistory

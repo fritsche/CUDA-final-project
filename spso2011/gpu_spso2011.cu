@@ -6,9 +6,9 @@
 #include <curand_kernel.h>
 
 #define POP_SIZE 			32 // the suggested value is 40
-#define SOLUTION_SIZE 		2
+#define SOLUTION_SIZE 		10
 #define K 					3
-#define MAX_ITERATIONS 		100
+#define MAX_ITERATIONS 		3125
 #define FUNCTION 			SPHERE
 #define CUDA_MAX_DOUBLE 	8.98847e+307 
 #define MIN_VALUE			-100.0
@@ -114,8 +114,8 @@ __device__ void rand_sphere (curandState_t* states, double *x, int dimension) {
 
 	double r = curand_uniform (states);
 
-	for (int i = 0; i < dimension; i++) {
-		x[i] = r * x[i] / length;
+	for (int i = 0; i < dimension; i++) 
+{		x[i] = r * x[i] / length;
 	}
 }
 
@@ -200,7 +200,7 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 	double velocity[SOLUTION_SIZE];
 	double local_best[SOLUTION_SIZE]; // personal best
 	double local_best_objective;
-	double neighbor_best[SOLUTION_SIZE]; // personal best
+	double neighbor_best[SOLUTION_SIZE];
 	double neighbor_best_objective = CUDA_MAX_DOUBLE;
 	__shared__ double best_fitness;
 	__shared__ double previous_best_fitness;
@@ -244,7 +244,7 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 
 	// printf("%d %lf\n", tid, neighbor_best_objective);
 
-	// it = 1 since the initialization also counts
+	// it = 1 because the initialization also counts
 	for (int it = 1; it < MAX_ITERATIONS; ++it)
 	{
 		update_velocity (states, solutions, local_best, neighbor_best, velocity);
@@ -287,7 +287,6 @@ __global__ void pso (curandState_t* states, double *solutions, double *objective
 
 	}
 
-	// @TODO
 	// if the particle found the best solution
 	if (best_fitness == local_best_objective)
 	{
@@ -320,7 +319,7 @@ int main(int argc, char const *argv[])
   	/* allocate space on the GPU for the random states */
 	HANDLE_ERROR( cudaMalloc((void**) &states, POP_SIZE * sizeof(curandState_t) ) );
   	/* invoke the GPU to initialize all of the random states */
-	init<<<1, POP_SIZE>>>(time(0), states);
+	init<<<1, POP_SIZE>>>(atoi(argv[1]), states);
 
 	// solutions[POPULATION_SIZE][SOLUTION_SIZE]
 	// [p0v0 p0v1 p1v0 p1v1 p2v0 p2v1]
@@ -345,12 +344,11 @@ int main(int argc, char const *argv[])
 	HANDLE_ERROR( cudaMemcpy(host_global_best_objective, dev_global_best_objective, sizeof(double), cudaMemcpyDeviceToHost));
 	HANDLE_ERROR( cudaMemcpy(host_best_solution, dev_best_solution, sizeof(double) * SOLUTION_SIZE, cudaMemcpyDeviceToHost));
 
-	printf("[ ");
 	for (int i = 0; i < SOLUTION_SIZE; ++i)
 	{
-		printf("%g ", host_best_solution[i]);
+		printf("%g\t", host_best_solution[i]);
 	}
-	printf("] = %g", *host_global_best_objective);
+	printf("%g\n", *host_global_best_objective);
 
 	// cudaDeviceSynchronize is used to allow printf inside device functions
 	// http://stackoverflow.com/questions/19193468/why-do-we-need-cudadevicesynchronize-in-kernels-with-device-printf
