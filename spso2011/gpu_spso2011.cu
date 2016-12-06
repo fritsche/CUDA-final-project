@@ -15,6 +15,7 @@
 #define MAX_VALUE			100.0
 
 #define tid							threadIdx.x
+#define stateid						threadIdx.x
 #define solution(row,col)			solutions[(row*SOLUTION_SIZE)+col]
 #define rand(min,max)				(max-min)*curand_uniform(&states[threadIdx.x])+min
 #define int_rand(max)				curand(&states[threadIdx.x])%max;
@@ -100,13 +101,13 @@ __device__ void rand_sphere (curandState_t* states, double *x, int dimension) {
 	}
 
 	for (int i = 0; i < dimension; i++) {
-		x[i] = curand_normal (states);
+		x[i] = curand_normal (&states[threadIdx.x]);
 		length += length + x[i] * x[i];
 	}
 
 	length = sqrt(length);
 
-	double r = curand_uniform (states);
+	double r = curand_uniform (&states[threadIdx.x]);
 
 	for (int i = 0; i < dimension; i++) 
 {		x[i] = r * x[i] / length;
@@ -239,6 +240,10 @@ __global__ void pso (curandState_t* states, double *global_best_objective, doubl
 	// wait all particles updates the best known fitness
 	__syncthreads();
 
+	if (tid == 0) {
+		printf("%g ", best_fitness);
+	}
+
 	// it = 1 because the initialization also counts
 	for (int it = 1; it < MAX_ITERATIONS; ++it)
 	{
@@ -280,6 +285,14 @@ __global__ void pso (curandState_t* states, double *global_best_objective, doubl
 			create_adaptive_random_neighborhood (states, neighborhood_adjacency_matrix);
 		}
 
+		if (tid == 0) {
+			printf("%g ", best_fitness);
+		}
+
+	}
+
+	if (tid == 0) {
+		printf("\n");
 	}
 
 	// if the particle found the best solution
@@ -341,11 +354,11 @@ int main(int argc, char const *argv[])
 	HANDLE_ERROR( cudaMemcpy(host_global_best_objective, dev_global_best_objective, sizeof(double), cudaMemcpyDeviceToHost));
 	HANDLE_ERROR( cudaMemcpy(host_best_solution, dev_best_solution, sizeof(double) * SOLUTION_SIZE, cudaMemcpyDeviceToHost));
 
-	for (int i = 0; i < SOLUTION_SIZE; ++i)
-	{
-		printf("%g\t", host_best_solution[i]);
-	}
-	printf("%g\n", *host_global_best_objective);
+	// for (int i = 0; i < SOLUTION_SIZE; ++i)
+	// {
+	// 	printf("%g\t", host_best_solution[i]);
+	// }
+	// printf("%g\n", *host_global_best_objective);
 
 	// cudaDeviceSynchronize is used to allow printf inside device functions
 	// http://stackoverflow.com/questions/19193468/why-do-we-need-cudadevicesynchronize-in-kernels-with-device-printf
