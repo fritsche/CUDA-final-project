@@ -296,10 +296,6 @@ __global__ void pso (curandState_t* states, double *global_best_objective, doubl
 		}
 	}
 
-	if (tid==0) {
-		printf("%d %g\n", bid, best_fitness);
-	}
-
 }
 
 /* this GPU kernel function is used to initialize the random states */

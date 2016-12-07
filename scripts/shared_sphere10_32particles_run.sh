@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "WARNING: this script is deprecated and may not work properly!"
+
 echo "compiling for GPU __shared__"
 nvcc -arch=sm_20 gpu_spso2011.cu -o gpu_shared_v0.2
 gpu_shared=./gpu_shared_v0.2
