@@ -1,5 +1,7 @@
 #!/bin/bash
 
+echo "WARNING: this script is deprecated and may not work properly!"
+
 echo "compiling for CPU"
 gcc -Wall cpu_spso2011.c -o cpu_v0.3 -lm
 cpu=./cpu_v0.3
