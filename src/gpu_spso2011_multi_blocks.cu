@@ -350,7 +350,7 @@ int main(int argc, char const *argv[])
 
 	for (int run = 0; run < INDEPENDENT_RUNS; ++run)
 	{
-		printf("%d ", run);	
+		// printf("%d ", run);	
 		for (int i = 0; i < SOLUTION_SIZE; ++i)
 		{
 			printf("%g\t", host_best_solution[(run*SOLUTION_SIZE)+i]);
