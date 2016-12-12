@@ -1,9 +1,15 @@
 ---
+
 author:
+
 - 'Gian M. Fritsche'
+
 bibliography:
+
 - 'bibliography.bib'
+
 title: Parallel Standard Particle Swarm Optimization
+
 ...
 
 Introduction
