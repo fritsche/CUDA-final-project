@@ -8,4 +8,11 @@
 .Rhistory
 .fuse_hidden*
 
+*.pdf
+*.aux
+*.log
+*.nfs*
+*.bbl
+*.blg
+
 /bin
