@@ -39,7 +39,7 @@
     In the previous versions of PSO, the velocity was updated dimension by dimension.
     However, in SPSO2011 the velocity is updated in a geometrical way,  that does not depend on the system of coordinates.
 
-    \begin{algorithm}[H]
+    \begin{algorithm}[!htb]
         \KwResult{The best solution and its fitness}
         
         create adaptive random neighbourhood\;
@@ -97,7 +97,7 @@
     If the best fitness is not improved, then the new neighborhood matrix is generated.
     After $T$ iterations the solution with fitness equals to the best fitness is the output of the algorithm.
 
-    \begin{algorithm}[H]
+    \begin{algorithm}[!htb]
         \KwResult{The best solution and its fitness}
         
         $tid = threadIdx.x\;$
@@ -158,6 +158,54 @@
     The first experiment was used to validate the equivalence regarding the quality of the GPU and CPU implementation. At first, the convergence was not similar between both implementations due to bugs on the CUDA implementation. After fixing the bugs, both implementations showed similar convergence along the execution.
 
     For this, and all other, experiment it was used $T=3125$ iterations, $32$ particles, $D=10$ decision variables, $K=3$, and the Sphere function for fitness evaluation.  We executed $51$ independent runs. Those parameters were based on~\cite{SPSOCEC}. Moreover, the Sphere function is a simple optimization function present on the COCO (Comparing Continuous Optimisers) benchmark~\footnote{http://coco.gforge.inria.fr/}.
+
+    The Table~\ref{tbl:gpuinfo} presents the information about the used GPU.
+    Besides, the Table~\ref{tbl:cpuinfo} presents the CPU information.
+
+	\begin{table}[!htb]
+		\centering
+		\caption{GPU information}
+		\label{tbl:gpuinfo}
+		\begin{tabular}{|l|l|}
+			\hline
+			\multicolumn{2}{|c|}{\textbf{--- General Information for device 0 ---}} \\ \hline
+			\textbf{Name}                          & GeForce GTX 680                \\ \hline
+			\textbf{Compute capability}            & 3.0                            \\ \hline
+			\textbf{Clock rate}                    & 1058500                        \\ \hline
+			\textbf{Device copy overlap}           & Enabled                        \\ \hline
+			\textbf{Kernel execution timeout}      & Disabled                       \\ \hline
+			\multicolumn{2}{|c|}{\textbf{--- Memory Information for device 0 ---}}  \\ \hline
+			\textbf{Total global mem}              & 2095382528                     \\ \hline
+			\textbf{Total constant Mem}            & 65536                          \\ \hline
+			\textbf{Max mem pitch}                 & 2147483647                     \\ \hline
+			\textbf{Texture Alignment}             & 512                            \\ \hline
+			\multicolumn{2}{|c|}{\textbf{--- MP Information for device 0 ---}}      \\ \hline
+			\textbf{Multiprocessor count}          & 8                              \\ \hline
+			\textbf{Shared mem per mp}             & 49152                          \\ \hline
+			\textbf{Registers per mp}              & 65536                          \\ \hline
+			\textbf{Threads in warp}               & 32                             \\ \hline
+			\textbf{Max threads per block}         & 1024                           \\ \hline
+			\textbf{Max thread dimensions}         & (1024, 1024, 64)               \\ \hline
+			\textbf{Max grid dimensions}           & (2147483647, 65535, 65535)     \\ \hline
+		\end{tabular}
+	\end{table}
+
+	\begin{table}[!htb]
+		\centering
+		\caption{CPU information}
+		\label{tbl:cpuinfo}
+		\begin{tabular}{|l|l|}
+			\hline
+			\textbf{vendor\_id} & GenuineIntel                             \\ \hline
+			\textbf{cpu family} & 6                                        \\ \hline
+			\textbf{model}      & 63                                       \\ \hline
+			\textbf{model name} & Intel(R) Core(TM) i7-5930K CPU @ 3.50GHz \\ \hline
+			\textbf{stepping}   & 2                                        \\ \hline
+			\textbf{microcode}  & 0x36                                     \\ \hline
+			\textbf{cpu MHz}    & 3599.941                                 \\ \hline
+			\textbf{cache size} & 15360 KB                                 \\ \hline
+		\end{tabular}
+	\end{table}
 
     In the Figures~\ref{fig:loglog_convergence} and~\ref{fig:loglog_convergence} it is presented the average convergence of the algorithms (GPU and CPU) during the iterations. Where it is possible to observe similar behavior.
 
