@@ -1,23 +1,17 @@
 ---
-
 author:
-
 - 'Gian M. Fritsche'
-
 bibliography:
-
 - 'bibliography.bib'
-
 title: Parallel Standard Particle Swarm Optimization
-
-...
+---
 
 Introduction
 ============
 
 The Particle Swarm Optimization @PSO95 is a meta-heuristic based on the
 behavior of bird flocks. Every iteration, each particle moves in the
-search space based on three components.
+search space based on three components:
 
 -   <span>*Social:*</span> This component contributes for the
     exploitation of the algorithm. It guides the search towards the best
@@ -65,25 +59,43 @@ In the previous versions of PSO, the velocity was updated dimension by
 dimension. However, in SPSO2011 the velocity is updated in a geometrical
 way, that does not depend on the system of coordinates.
 
-\[alg:spso2011\]
+Parallel SPSO-2011
+==================
 
-Parallel Standard Particle Swarm Optimization
-=============================================
+Related works
+-------------
 
-In this work, we use the SPSO2011. The parallel implementation
-associates each particle with one thread (Algorithm \[alg:pspso2011\]).
-In this way, all `foreach particle  i \in swarm ` were removed and
-executed in parallel based on the thread id inside the block
-($threadIdx.x$ or $tid$). In the create adaptive random neighborhood
-method each particle selects up to $K$ neighbors. Then the particle
-updates its position and velocity; the position is evaluated using the
-fitness function, and the personal best is updated. Then, to update the
-neighbor best information, the particle search on the adjacency matrix
-of the neighborhood for all its neighbors and compares to itself. The
-best global fitness is computed using atomic operations. The
-$atomicMin(a, b)$ was implemented based on the CUDA $atomicCAS$, which
-realizes a compare and swap operation. Before entering the main loop,
-the implementation applies a thread synchronization.
+In the literature, it is possible to find different proposals of
+Parallel PSOs. One of the most recent is the GPU-based Asynchronous
+Particle Swarm Optimization @GPUPSO. That implements a simple ring
+topology. In @ReviewGPUPSO, it is presented a review of Particle Swarm
+Optimization on GPU. The paper presents 28 references of PSO on GPU
+including multi-objective versions and variations of PSO from 2009 to
+2014. One of the papers from the review implements the Standard Particle
+Swarm Optimization 2007 using GPU @GPUSPSO2007. The GPU version was 11
+times faster than the CPU, mainly with a large population and high
+dimensional problems.
+
+Proposal
+--------
+
+In this work, we use the SPSO2011, which uses the Adaptive Random
+Neighborhood topology. During the literature review, it was not found
+any other implementation of the SPSO2011 using GPU. The parallel
+implementation associates each particle with one thread
+(Algorithm \[alg:pspso2011\]). In this way, all
+`foreach particle  i \in swarm ` were removed and executed in parallel
+based on the thread id inside the block ($threadIdx.x$ or $tid$). In the
+create adaptive random neighborhood method each particle selects up to
+$K$ neighbors. Then the particle updates its position and velocity; the
+position is evaluated using the fitness function, and the personal best
+is updated. Then, to update the neighbor best information, the particle
+search on the adjacency matrix of the neighborhood for all its neighbors
+and compares to itself. The best global fitness is computed using atomic
+operations. The $atomicMin(a, b)$ was implemented based on the CUDA
+$atomicCAS$, which realizes a compare and swap operation. Before
+entering the main loop, the implementation applies a thread
+synchronization.
 
 The first particle copies the best fitness for later comparison. Inside
 the main loop, the particle updates its velocity, position, and fitness.
@@ -97,8 +109,6 @@ best fitness before using its value. If the best fitness is not
 improved, then the new neighborhood matrix is generated. After $T$
 iterations the solution with fitness equals to the best fitness is the
 output of the algorithm.
-
-\[alg:pspso2011\]
 
 In the first implemented version it was not used shared memory, but in a
 second implementation it was used and the execution time was improved.
@@ -121,9 +131,7 @@ Experiments and Results
 =======================
 
 The first experiment was used to validate the equivalence regarding the
-quality of the GPU and CPU implementation. At first, the convergence was
-not similar between both implementations due to bugs on the CUDA
-implementation. After fixing the bugs, both implementations showed
+quality of the GPU and CPU implementation. Both implementations showed
 similar convergence along the execution.
 
 For this, and all other, experiment it was used $T=3125$ iterations,
@@ -132,6 +140,44 @@ function for fitness evaluation. We executed $51$ independent runs.
 Those parameters were based on @SPSOCEC. Moreover, the Sphere function
 is a simple optimization function present on the COCO (Comparing
 Continuous Optimisers) benchmark [^1].
+
+The Table \[tbl:gpuinfo\] presents the information about the used GPU.
+Besides, the Table \[tbl:cpuinfo\] presents the CPU information.
+
+
+| Table 1.                                 | GPU Information            |
+|------------------------------------------|----------------------------|
+| --- General Information for device 0 --- |                            |
+| Name                                     | GeForce GTX 680            |
+| Compute capability                       | 3.0                        |
+| Clock rate                               | 1058500                    |
+| Device copy overlap                      | Enabled                    |
+| Kernel execution timeout                 | Disabled                   |
+| --- Memory Information for device 0 ---  |                            |
+| Total global mem                         | 2095382528                 |
+| Total constant Mem                       | 65536                      |
+| Max mem pitch                            | 2147483647                 |
+| Texture Alignment                        | 512                        |
+| --- MP Information for device 0 ---      |                            |
+| Multiprocessor count                     | 8                          |
+| Shared mem per mp                        | 49152                      |
+| Registers per mp                         | 65536                      |
+| Threads in warp                          | 32                         |
+| Max threads per block                    | 1024                       |
+| Max thread dimensions                    | (1024, 1024, 64)           |
+| Max grid dimensions                      | (2147483647, 65535, 65535) |
+
+
+| Table 2.   | CPU Information                          |
+|------------|------------------------------------------|
+| vendor_id  | GenuineIntel                             |
+| cpu family | 6                                        |
+| model      | 63                                       |
+| model name | Intel(R) Core(TM) i7-5930K CPU @ 3.50GHz |
+| stepping   | 2                                        |
+| microcode  | 0x36                                     |
+| cpu MHz    | 3599.941                                 |
+| cache size | 15360 KB                                 |
 
 In the Figures \[fig:loglog\_convergence\]
 and \[fig:loglog\_convergence\] it is presented the average convergence
@@ -180,8 +226,8 @@ In this project, we implement a Parallel Standard Particle Swarm
 Optimization. First, we compare the implementations regarding
 convergence quality, in which both GPU and CPU implementations were
 similar. After different implementations and experiments, it was
-possible to achieve a 14.49 speed up. The execution time of the CPU
-version for 51 runs was 15.45444 seconds (in an average of 30
+possible to achieve a 12.054 speed up. The execution time of the CPU
+version for 51 runs was 12.84892 seconds (in an average of 30
 repetitions). Moreover, the execution time for the GPU version was
 1.065946 seconds.
 
