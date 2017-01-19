@@ -10,7 +10,7 @@
 #define K 					3
 #define MAX_ITERATIONS 		3125
 #define INDEPENDENT_RUNS	51
-#define FUNCTION 			SPHERE
+#define FUNCTION 			SCHAFFER
 #define CUDA_MAX_DOUBLE 	8.98847e+307 
 #define MIN_VALUE			-100.0
 #define MAX_VALUE			100.0
@@ -46,9 +46,24 @@ __device__ double objective_function (double *solutions) {
 	{
 		value += ( solution(tid,i) * solution(tid,i) );
 	}
+
+	#endif
+
+	// http://www.cs.unm.edu/~neal.holts/dga/benchmarkFunction/schafferf7.html
+	#if FUNCTION == SCHAFFER
+		size_t i = 0;
+
+		value = 0.0;
+		for (i = 0; i < SOLUTION_SIZE - 1; ++i) {
+			const double tmp = solution(tid,i) * solution(tid,i) + solution(tid,i+1) * solution(tid,i+1);
+			value += pow(tmp, 0.25) * (1.0 + pow(sin(50.0 * pow(tmp, 0.1)), 2.0));
+		}
+		value = pow(value / ((double) (long) SOLUTION_SIZE - 1.0), 2.0);
+
 	#endif
 
 	return value;
+
 }
 
 __device__ double update_neighbor_best (double neighbor_best_objective, bool * neighborhood_adjacency_matrix, double *objectives, double *neighbor_best, double *solutions) {

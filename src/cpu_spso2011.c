@@ -8,7 +8,7 @@
 #define SOLUTION_SIZE 		10
 #define MIN_VALUE			-100.0
 #define MAX_VALUE			100.0
-#define FUNCTION 			SPHERE
+#define FUNCTION 			SCHAFFER
 #define MAX_ITERATIONS 		3125
 #define K 					3
 
@@ -22,6 +22,19 @@ double objective_function (double *solution) {
 	{
 		value += ( solution[i] * solution[i] );
 	}
+	#endif
+
+	// http://www.cs.unm.edu/~neal.holts/dga/benchmarkFunction/schafferf7.html
+	#if FUNCTION == SCHAFFER
+		size_t i = 0;
+
+		value = 0.0;
+		for (i = 0; i < SOLUTION_SIZE - 1; ++i) {
+			const double tmp = solution[i] * solution[i] + solution[i+1] * solution[i+1];
+			value += pow(tmp, 0.25) * (1.0 + pow(sin(50.0 * pow(tmp, 0.1)), 2.0));
+		}
+		value = pow(value / ((double) (long) SOLUTION_SIZE - 1.0), 2.0);
+
 	#endif
 
 	return value;
