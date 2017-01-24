@@ -1,0 +1,43 @@
+>> mean(sphere10_32particles_cpu_time)
+ans =  0.34615
+>> mean(sphere10_32particles_cpu_time_multi_runs)
+ans =  12.849
+>> mean(sphere10_32particles_cpu_time_multi_runs_loop)
+ans =  15.454
+>> mean(sphere10_32particles_cpu_time_multi_runs_loop)
+>> mean(sphere10_32particles_gpu_time)
+ans =  1.1326
+>> mean(sphere10_32particles_gpu_shared_time)
+ans =  0.99549
+>> mean(sphere10_32particles_gpu_time_multi_runs)
+ans =  1.0659
+>> mean(sphere10_32particles_gpu_shared_time) / mean(sphere10_32particles_cpu_time)
+ans =  2.8759
+>> mean(sphere10_32particles_gpu_time) / mean(sphere10_32particles_cpu_time)
+ans =  3.2721
+>> mean(sphere10_32particles_gpu_time) / mean(sphere10_32particles_gpu_shared_time)
+ans =  1.1377
+>> mean(sphere10_32particles_cpu_time_multi_runs) / mean(sphere10_32particles_gpu_time_multi_runs)
+ans =  12.054
+>> mean(schafferf7_32particles_cpu_time_multi_runs)
+ans =  19.391
+>> mean(schafferf7_32particles_gpu_time_multi_runs)
+ans =  1.1545
+>> mean(schafferf7_32particles_cpu_time_multi_runs) / mean(schafferf7_32particles_gpu_time_multi_runs)
+ans =  16.796
+>> mean(scalability_schafferf7_cpu_time_multi_runs)
+ans =
+
+    23.801    47.080    69.506    85.659   108.703
+
+>> mean(scalability_schafferf7_gpu_time_multi_runs)
+ans =
+
+   1.2274   1.8086   2.9866   5.2027   5.4543
+
+>> mean(scalability_schafferf7_cpu_time_multi_runs) ./ mean(scalability_schafferf7_gpu_time_multi_runs)
+ans =
+
+   19.391   26.031   23.273   16.464   19.930
+
+>>
