@@ -4,6 +4,7 @@
 \usepackage[]{todonotes}
 \usepackage[outdir=./]{epstopdf}
 \usepackage[ruled]{algorithm2e}
+\usepackage{amsmath}
 
 \title{Parallel Standard Particle Swarm Optimization}
 \author{Gian M. Fritsche}
@@ -85,12 +86,12 @@
 
     In the literature, it is possible to find different proposals of Parallel PSOs.
     One of the most recent is the GPU-based Asynchronous Particle Swarm Optimization~\cite{GPUPSO}.
-      That implements a simple ring topology.
-      In~\cite{ReviewGPUPSO}, it is presented a review of Particle Swarm Optimization on GPU.
-      The paper presents 28 references of PSO on GPU including multi-objective versions and variations of PSO from 2009 to 2014.
-      One of the papers from the review implements the Standard Particle Swarm Optimization 2007 using GPU~\cite{GPUSPSO2007}. The GPU version was 11 times faster than the CPU, mainly with a large population and high dimensional problems.
+    That implements a simple ring topology.
+    In~\cite{ReviewGPUPSO}, it is presented a review of Particle Swarm Optimization on GPU.
+    The paper presents 28 references of PSO on GPU including multi-objective versions and variations of PSO from 2009 to 2014.
+    One of the papers from the review implements the Standard Particle Swarm Optimization 2007 using GPU~\cite{GPUSPSO2007}. The GPU version was 11 times faster than the CPU, mainly with a large population and high dimensional problems.
 
-      \subsection{Proposal}
+    \subsection{Proposal}
 
     In this work, we use the SPSO2011, which uses the Adaptive Random Neighborhood topology.  
     During the literature review, it was not found any other implementation of the SPSO2011 using GPU.
@@ -102,11 +103,11 @@
     Before entering the main loop, the implementation applies a thread synchronization.
 
     The first particle copies the best fitness for later comparison.
-    Inside the main loop, the particle updates its velocity, position, and fitness.
+    Inside the main loop, the particle (thread) updates its velocity, position, and fitness.
     The personal best information is updated.
     Before set the neighbor best information a synchronization is necessary because the threads must compare its fitness to the updated value of its neighbors.
     Then, the neighbor best information is updated. Also, the best fitness is updated using the $atomicMin$ function.
-    After the best fitness update it is applied another \texttt{\_\_syncthreads()}. To wait for all threads update the best fitness before using its value.
+    After the best fitness update, it is applied another \texttt{\_\_syncthreads()}. To wait for all threads update the best fitness before using its value.
     If the best fitness is not improved, then the new neighborhood matrix is generated.
     After $T$ iterations the solution with fitness equals to the best fitness is the output of the algorithm.
 
@@ -160,17 +161,39 @@
     In the first implemented version it was not used shared memory, but in a second implementation it was used and the execution time was improved.
     Another item important to highlight is the two \texttt{\_\_syncthreads()} inside the loop.
     The use of \texttt{\_\_syncthreads()} generally slow down the execution of a CUDA program.
-    However, in this implementation we did not have this problem due to the block size equals to warp size.
-    Since the threads in the same warp execute in true (hardware) parallelism, there is no situation where threads need to sync with others on the same block.
+    % However, in this implementation we did not have this problem due to the block size equals to warp size.
+    % Since the threads in the same warp execute in true (hardware) parallelism, there is no situation where threads need to sync with others on the same block.
 
     The first experiments were executed using only one block. However, the experiments run the SPSO several times; those executions can be run in parallel, using different and independent blocks. In the experiments using only one block the CPU implementation had a better execution time. However, when using multi executions at once, the GPU implementation achieved a better execution time.
+    Those first experimets were executed using a simple function called Sphere.
+    Then it was evaluated the scalability of the implementations increasing the population size. The population size defines the number of threads per block. For those experiments it was used the Schaffer function.
     The next section details the experiments and results.
 
     \section{Experiments and Results}
 
     The first experiment was used to validate the equivalence regarding the quality of the GPU and CPU implementation. Both implementations showed similar convergence along the execution.
 
-    For this, and all other, experiment it was used $T=3125$ iterations, $32$ particles, $D=10$ decision variables, $K=3$, and the Sphere function for fitness evaluation.  We executed $51$ independent runs. Those parameters were based on~\cite{SPSOCEC}. Moreover, the Sphere function is a simple optimization function present on the COCO (Comparing Continuous Optimisers) benchmark~\footnote{http://coco.gforge.inria.fr/}.
+    For this first experiments it was used $T=3125$ iterations, $32$ particles, $D=10$ decision variables, $K=3$, and the Sphere function for fitness evaluation (this function is presented in Figure~\ref{fig:sphere}).  We executed $51$ independent runs. Those parameters were based on~\cite{SPSOCEC}. Moreover, the Sphere function is a simple optimization function present on the COCO (Comparing Continuous Optimisers) benchmark~\footnote{http://coco.gforge.inria.fr/}. The Sphere function is a minimization problem: 
+
+    \begin{equation}
+        f(x_1 \cdots x_n) = \sum_{i=1}^n x_i^2
+    \end{equation}
+
+    \begin{equation}
+            -100.0 \leq x_i \leq 100.0
+    \end{equation}
+
+    \begin{equation}
+       \text{minimum at }f(0, \cdots, 0) = 0
+    \end{equation}
+
+     \begin{figure}[!htb]
+        \centering
+        \includegraphics[width=.7\textwidth]{../img/sphere.png}
+        \caption{Sphere --- Two dimensional view}
+        \label{fig:sphere}
+    \end{figure}
+
 
     The Table~\ref{tbl:gpuinfo} presents the information about the used GPU.
     Besides, the Table~\ref{tbl:cpuinfo} presents the CPU information.
@@ -220,7 +243,9 @@
         \end{tabular}
     \end{table}
 
-    In the Figures~\ref{fig:loglog_convergence} and~\ref{fig:loglog_convergence} it is presented the average convergence of the algorithms (GPU and CPU) during the iterations. Where it is possible to observe similar behavior.
+    In the Figure~\ref{fig:semilogy_convergence} it is presented the average convergence of the algorithms (GPU and CPU) during the iterations. Where it is possible to observe similar behavior because they implement the same algorithm.
+    As increasing the number of iteration better is the quality of the solutions. 
+    That indicates that the implementations of GPU and CPU are equivalent in terms of solution quality.
 
     % \begin{figure}[!htb]
     %     \centering
@@ -240,7 +265,9 @@
     Then, we implemented a version using shared memory also.
     The best-known fitness, the previous best, the population (or swarm), the fitness values and the adjacency matrix use shared memory.
     We compare the three versions (CPU, GPU, and GPU with shared memory). In terms of convergence the results were similar (as they should [Figure~\ref{fig:sphere10_32particles_fitness}]).
-    The experiments were repeated $51$ times with the GPU versions using just one block with 32 threads. The GPU with shared memory was faster than GPU without using shared memory. But, the CPU implementation was the fastest (Figure~\ref{fig:sphere10_32particles_time}).
+    That indicates that the GPU implementation using shared memory is equivalent to the previous GPU and CPU version in terms of quality of solutions.
+    The experiments were repeated $51$ times with the GPU versions using just one block with $32$ threads. The GPU with shared memory was $1.1377$ times faster in average than GPU without using shared memory. But, the CPU implementation was the fastest: $2.87$ times faster than GPU (Figure~\ref{fig:sphere10_32particles_time}).
+    Those results shows that the GPU using only one block of $32$ threads is not competitive against the CPU. As the implementation using shared memory was faster than the previous one, it is the default GPU implementation used on the next experiments.
 
 
     \begin{figure}[!htb]
@@ -261,7 +288,13 @@
     \end{figure}
 
 
-    To use the CUDA parallelism capabilities and exploit the characteristics of SPSO the GPU implementation executes the $51$ runs in parallel using 51 blocks. To evaluated the execution time we repeat the experiment30 times. The fitness of the GPU (with shared memory) and CPU continued to be similar (Figure~\ref{fig:sphere10_32particles_multi_runs_fitness}) but the execution time of the GPU was faster than CPU (Figure~\ref{fig:sphere10_32particles_multi_runs_time}).
+    \subsection{Multi-blocks experiments}
+
+    To use the CUDA parallelism capabilities and exploit the characteristics of SPSO it was created another GPU code implementation that executes the $51$ runs in parallel using $51$ blocks. To evaluate the execution time we repeat the experiment $30$ times. For comparison it was also implemented a CPU version that compute the $51$ independent runs but iteratively.
+    Again it is first evaluated if the quality of the result is equivalent between the CPU and GPU implementations.
+    The fitness of the GPU (with shared memory) and CPU continued to be similar (Figure~\ref{fig:sphere10_32particles_multi_runs_fitness}) but the execution time of the GPU was faster than CPU (Figure~\ref{fig:sphere10_32particles_multi_runs_time}).
+    Using $51$ blocks to execute the $51$ independent runs of the algorithm the GPU implementation was $12$ times faster then CPU. The execution of the GPU code took $0.346$ seconds in average. While the CPU code took $12.849$ seconds in average.
+
 
     \begin{figure}[!htb]
         \centering
@@ -274,17 +307,52 @@
     \begin{figure}[!htb]
         \centering
         \includegraphics[width=.7\textwidth]{../img/sphere10_32particles_multi_runs_time.eps}
-        \caption{Boxplot of the execution time (in seconds) of CPU and GPU (with shared memory) on the Sphere problem with $10$ dimensions. In this experiment the GPU uses $51$ blocks of $32$ threads and the experiment was repeated $30$ times. The GPU was $12$ times faster than CPU}
+        \caption{Boxplot of the execution time (in seconds) of CPU and GPU (with shared memory) on the Sphere problem with $10$ dimensions. In this experiment the GPU uses $51$ blocks of $32$ threads and the experiment was repeated $30$ times. The GPU was $12$ times faster than CPU.}
         % \caption{Execution time of different implementations (GPU 51-blocks, 30 repetitions)}
         \label{fig:sphere10_32particles_multi_runs_time}
     \end{figure}
 
 
+    \subsection{Scalability experiments}
+
+    To evaluate a better use of the GPU capabilities some experiments were made in order to evaluate:
+    \begin{enumerate}
+        \item How the implementations behave in a more complicated problem?
+        \item It is possible to improve the quality of the solutions, increasing the size of the population (that defines the number of threads) ?
+        \item How the increasing of the size of the population affects the execution time?
+    \end{enumerate}
+
+    For this experiment we use the Schaffer's function~\cite{Schaffer} (preseted by Figure~\ref{fig:schaffer}.
+    A minimization problem: 
+
+    \begin{equation}
+        f(x_0 \cdots x_n) = [\frac{1}{n-1}\sqrt{s_i} \cdot (sin(50.0s_i^{\frac{1}{5}})+1)]^2 s_i = \sqrt{x_i^2 + x_{i+1}^2}
+    \end{equation}
+
+    \begin{equation}
+            100.0 \leq x_i \leq 100.0
+    \end{equation}
+
+    \begin{equation}
+        \text{minimum at }f(0, \cdots, 0) = 0
+    \end{equation}
+
+     \begin{figure}[!htb]
+        \centering
+        \includegraphics[width=.7\textwidth]{../img/schafferf7.png}
+        \caption{Schaffer's F7 --- Two dimensional view}
+        % \caption{Execution time of different implementations (GPU 51-blocks, 30 repetitions)}
+        \label{fig:schaffer}
+    \end{figure}
+
+    The Schaffer problem is far more complex than Sphere and it is also present on the COCO (Comparing Continuous Optimisers) benchmark~\footnote{http://coco.gforge.inria.fr/}.
+    In a first experiment it was checked if the GPU and CPU implementations obtain equivalent results in this new problem. Figure~\ref{fig:schaffer10_32particles_fitness} shows that they did obtained equivalent results in terms of quality of solutions.
+    Then it was evaluated the execution time, in this experiment the GPU uses $51$ blocks of $32$ threads and the experiment was repeated $30$ times. The CPU implementation took $19.391$ seconds in average, while the GPU implementation took only $1.154$ seconds in average. So, the GPU was $16.8$ times faster than CPU (Figure~\ref{fig:schaffer10_32particles_time}).
+
     \begin{figure}[!htb]
         \centering
         \includegraphics[width=.7\textwidth]{../img/schaffer10_32particles_fitness.eps}
         \caption{Boxplot of the quality of the solutions on the problem Schaffer with $10$ dimensions. In this experiment the GPU uses $51$ blocks of $32$ threads and the experiment was repeated $30$ times. The quality of the result is similar as they implement the same algorithm.}
-        % \caption{Convergence CPU \it{vs} GPU --- Schaffer problem }
         \label{fig:schaffer10_32particles_fitness}
     \end{figure}
 
@@ -293,17 +361,24 @@
         \centering
         \includegraphics[width=.7\textwidth]{../img/schaffer10_32particles_time.eps}
         \caption{Boxplot of the execution time (in seconds) of GPU and CPU versions on the Shaffer problem with $10$ dimensions. In this experiment the GPU uses $51$ blocks of $32$ threads and the experiment was repeated $30$ times. The GPU version was about $16.8$ times faster then CPU.}
-        % \caption{Execution time CPU \it{vs} GPU --- Schaffer problem }
         \label{fig:schaffer10_32particles_time}
     \end{figure}
+
+    To evaluate the scalability of the algorithms increasing the population size (and consequently the number of threads) an experiment was performed.
+    The population size was set from $32$ up to $160$, increasing $32$ each time ({\it i.e.} \{$32$, $64$, $96$, $128$, $160$\}). The number of threads was not set above $160$ to exploit the use of shared memory. From Figure~\ref{fig:scalability_schafferf7} it is possible to observe that the quality of the solutions improve increasing the population size. Also, both CPU and GPU obtain equivalent results (in terms of quality of output) mainly from $32$ to $64$.
 
     \begin{figure}[!htb]
         \centering
         \includegraphics[width=.7\textwidth]{../img/scalability_schafferf7.eps}
-        \caption{Scalability of the quality: average quality of the implementations (CPU and GPU) when increasing the population size. In this experiment the GPU uses $51$ blocks and the population size defines the number of threads. The experiment was repeated $30$ times. Both algorithms perform similarly, as much more population size better the quality of the solutions.}
-        % \caption{Convergence when increasing the population size}
+        \caption{Scalability of the quality: average quality of the implementations (CPU and GPU) when increasing the population size. In this experiment the GPU uses $51$ blocks and the population size defines the number of threads. The experiment was repeated $30$ times. Both algorithms perform similarly, as much more population size, better the quality of the solutions.}
         \label{fig:scalability_schafferf7}
     \end{figure}
+
+    It was also evaluated the scalability in terms of execution time (Figure~\ref{fig:scalability_schafferf7_time}).
+    For both GPU and CPU increasing the population size (threads per block) increases the execution time.
+    Although, the CPU time increases more drastically. From $32$ to $160$ the CPU execution time increased from $23.8$ seconds to $108.7$ seconds, while the GPU time increased from $1.22$ seconds to $5.45$. The Table~\ref{tbl:scalability} presents the scalability of GPU and CPU increasing the population size. 
+
+ %% TODO descerever a tabela.
 
 
     \begin{figure}[!htb]

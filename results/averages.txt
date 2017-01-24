@@ -2,9 +2,6 @@
 ans =  0.34615
 >> mean(sphere10_32particles_cpu_time_multi_runs)
 ans =  12.849
->> mean(sphere10_32particles_cpu_time_multi_runs_loop)
-ans =  15.454
->> mean(sphere10_32particles_cpu_time_multi_runs_loop)
 >> mean(sphere10_32particles_gpu_time)
 ans =  1.1326
 >> mean(sphere10_32particles_gpu_shared_time)
